@@ -1,0 +1,20 @@
+<?php
+
+namespace {{ namespace }};
+
+class {{ class }} extends {{ base }}
+{
+    /**
+     * Get the fields displayed by the resource.
+     *
+     * Yours to edit: blueprintFields() is rebuilt from the draft on every build, this method is never touched.
+     *
+     * @return array<int, mixed>
+     */
+    public function fields(NovaRequest $request)
+    {
+        return [
+            ...$this->blueprintFields($request),
+        ];
+    }
+}

@@ -1,0 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Dakotajune\BlueprintNovaResources\Fields;
+
+/**
+ * What the draft says about one field: `fields: status: badge` or the long form
+ * `fields: status: { as: badge, label: State, hide: [index], readonly: true, sortable: false, rules: [...], map: {...} }`.
+ */
+final class FieldOptions
+{
+    /** The badge types Nova defines (Laravel\Nova\Badge constants). */
+    public const BADGE_TYPES = ['info', 'success', 'warning', 'danger'];
+
+    public const HIDE = ['index' => 'hideFromIndex', 'detail' => 'hideFromDetail', 'create' => 'hideWhenCreating', 'update' => 'hideWhenUpdating'];
+
+    /**
+     * @param  array<int, string>  $hide  index | detail | create | update
+     * @param  array<int, string>|null  $rules  Replaces the rules derived from the column
+     * @param  array<string, string>|null  $map  value => badge type, for `as: badge`
+     */
+    public function __construct(
+        public readonly bool $omit = false,
+        public readonly ?string $as = null,
+        public readonly ?string $label = null,
+        public readonly array $hide = [],
+        public readonly ?bool $readonly = null,
+        public readonly ?bool $sortable = null,
+        public readonly ?array $rules = null,
+        public readonly ?array $map = null,
+    ) {}
+
+    public static function none(): self
+    {
+        return new self();
+    }
+
+    /** Adds the visibility and read-only calls the draft asked for. */
+    public function applyVisibility(FieldDefinition $field): FieldDefinition
+    {
+        foreach ($this->hide as $where) {
+            $field = $field->with(self::HIDE[$where]);
+        }
+
+        return $this->readonly === true ? $field->with('readonly') : $field;
+    }
+}

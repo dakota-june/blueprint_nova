@@ -1,0 +1,44 @@
+{
+    "name": "dakotajune/blueprint_nova_resources",
+    "description": "First-class Laravel Nova resource generation for Laravel Blueprint.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Dakotajune\\BlueprintNovaResources\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Dakotajune\\BlueprintNovaResources\\Tests\\": "tests/"
+        }
+    },
+    "require": {
+        "php": "^8.3",
+        "ext-tokenizer": "*",
+        "illuminate/support": "^11.0|^12.0|^13.0",
+        "illuminate/console": "^11.0|^12.0|^13.0",
+        "laravel-shift/blueprint": "^2.10"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0"
+    },
+    "suggest": {
+        "laravel/nova": "The generated resources extend Laravel\\Nova\\Resource; Nova is not needed to run the generator."
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Dakotajune\\BlueprintNovaResources\\BlueprintNovaResourcesServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
