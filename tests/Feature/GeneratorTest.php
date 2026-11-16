@@ -72,8 +72,8 @@ it('never reports a pre-existing developer file as created', function () {
 
     $out = $this->build($this->draft());
 
-    expect($out['updated'])->toContain('app/Nova/User.php')
-        ->and($out['created'])->not->toContain('app/Nova/User.php');
+    expect(array_column($out['updated'], 1))->toContain('app/Nova/User.php')
+        ->and(array_column($out['created'], 1))->not->toContain('app/Nova/User.php');
     expect(substr_count(file_get_contents($this->novaPath('User')), '$model'))->toBe(1);
 });
 
@@ -107,6 +107,36 @@ it('honours auto_resources and per-model opt-out', function () {
 
     $out = $this->build($draft);
 
-    expect($out['created'])->toContain('app/Nova/Invoice.php', 'app/Nova/Payment.php')
+    expect(array_column($out['created'], 1))->toContain('app/Nova/Invoice.php', 'app/Nova/Payment.php')
         ->not->toContain('app/Nova/User.php');
 });
+
+it('reports files as [label, path] pairs, the way Blueprint prints and records them', function () {
+    $out = $this->build($this->draft());
+
+    foreach (['created', 'updated'] as $action) {
+        foreach ($out[$action] as $entry) {
+            expect($entry)->toBeArray()->toHaveCount(2)
+                ->and($entry[0])->toBeString()
+                ->and($entry[1])->toBeString();
+        }
+    }
+
+    // Blueprint's Builder writes array_column($entries, 1) into `.blueprint`, which `blueprint:erase` deletes from.
+    expect(array_column($out['created'], 1))->toContain('app/Nova/Invoice.php', 'app/Nova/Payment.php', 'app/Nova/User.php');
+});
+
+it('only asks for registration when the provider does not already register app/Nova', function (string $provider, int $expected) {
+    mkdir(base_path('app/Providers'), 0777, true);
+    file_put_contents(base_path('app/Providers/NovaServiceProvider.php'), $provider);
+
+    $this->build($this->draft());
+
+    expect(array_filter($this->notices(), fn (string $n) => str_contains($n, 'may need registering')))->toHaveCount($expected);
+})->with([
+    'extends Nova, no override' => ["<?php\n\nnamespace App\\Providers;\n\nuse Laravel\\Nova\\NovaApplicationServiceProvider;\n\nclass NovaServiceProvider extends NovaApplicationServiceProvider\n{\n}\n", 0],
+    'extends Nova by full name' => ["<?php\n\nnamespace App\\Providers;\n\nclass NovaServiceProvider extends \\Laravel\\Nova\\NovaApplicationServiceProvider\n{\n}\n", 0],
+    'overrides resources() with resourcesIn' => ["<?php\n\nnamespace App\\Providers;\n\nuse Laravel\\Nova\\Nova;\nuse Laravel\\Nova\\NovaApplicationServiceProvider;\n\nclass NovaServiceProvider extends NovaApplicationServiceProvider\n{\n    protected function resources(): void\n    {\n        Nova::resourcesIn(app_path('Nova'));\n    }\n}\n", 0],
+    'overrides resources() and lists only User' => ["<?php\n\nnamespace App\\Providers;\n\nuse Laravel\\Nova\\Nova;\nuse Laravel\\Nova\\NovaApplicationServiceProvider;\n\nclass NovaServiceProvider extends NovaApplicationServiceProvider\n{\n    protected function resources(): void\n    {\n        Nova::resources([\\App\\Nova\\User::class]);\n    }\n}\n", 2],
+    'not a Nova provider' => ["<?php\n\nnamespace App\\Providers;\n\nuse Illuminate\\Support\\ServiceProvider;\n\nclass NovaServiceProvider extends ServiceProvider\n{\n}\n", 3],
+]);

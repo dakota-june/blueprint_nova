@@ -8,7 +8,7 @@ use Symfony\Component\Console\Output\NullOutput;
 
 it('protects edited resources from blueprint:erase and leaves untouched ones deletable', function () {
     $out = $this->build($this->draft());
-    file_put_contents(base_path('.blueprint'), $this->app->make(\Blueprint\Blueprint::class)->dump(['created' => $out['created'], 'updated' => []]));
+    file_put_contents(base_path('.blueprint'), $this->app->make(\Blueprint\Blueprint::class)->dump(['created' => array_column($out['created'], 1), 'updated' => []]));
 
     $payment = file_get_contents($this->novaPath('Payment'));
     file_put_contents($this->novaPath('Payment'), str_replace(

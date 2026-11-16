@@ -20,9 +20,29 @@ abstract class TestCase extends Orchestra
     {
         parent::setUp();
 
+        $this->clean();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->clean();
+
+        parent::tearDown();
+    }
+
+    private function clean(): void
+    {
         (new Filesystem())->deleteDirectory(base_path('app/Nova'));
         @unlink(base_path('.blueprint_nova_resources'));
         @unlink(base_path('.blueprint'));
+        @unlink(base_path('app/Providers/NovaServiceProvider.php'));
+        $this->app->make(\Dakotajune\BlueprintNovaResources\Support\NoticeBag::class)->pull();
+    }
+
+    /** @return array<int, string> */
+    protected function notices(): array
+    {
+        return $this->app->make(\Dakotajune\BlueprintNovaResources\Support\NoticeBag::class)->pull();
     }
 
     /** Runs the real Blueprint lexers, and our generator only, over a draft (already-parsed array form). */

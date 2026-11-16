@@ -88,7 +88,8 @@ final class NovaResourceGenerator implements Generator
             $seed = $this->write($tree, $resource, $path, $existed, $catalog)
                 ?? ($existed ? ($previous->resource($path)['seed'] ?? null) : null);
 
-            $output[$created ? 'created' : 'updated'][] = $path;
+            // Blueprint prints each entry as [label, path] and records the path in `.blueprint` (array_column(..., 1)).
+            $output[$created ? 'created' : 'updated'][] = ['Nova resource', $path];
             $next->recordResource($path, $resource->name(), $created, $seed);
 
             if (! $existed) {
@@ -520,6 +521,12 @@ final class NovaResourceGenerator implements Generator
         $source = $this->files->get($provider);
 
         if (str_contains($source, 'resourcesIn(') || str_contains($source, $resource->name() . '::class')) {
+            return;
+        }
+
+        // Nova's own provider class registers everything in app/Nova unless resources() is overridden here.
+        if (preg_match('/extends\s+\\\\?(?:Laravel\\\\Nova\\\\)?NovaApplicationServiceProvider\b/', $source)
+            && ! preg_match('/function\s+resources\s*\(/', $source)) {
             return;
         }
 
