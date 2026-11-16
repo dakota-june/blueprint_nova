@@ -52,6 +52,17 @@ Two things the build tells you about an existing file:
 
 Field overrides (`fields: column: …`): a type string (`text textarea markdown trix code number currency boolean date datetime select badge email url password color country timezone hidden`) or a map with `omit as label hide readonly sortable rules map`. Both the column (`invoice_id`) and the relationship (`invoice`) name work for belongsTo, but `as` is only accepted on the column: a relationship's field type is fixed, so `invoice: { as: text }` is an error that points you at `invoice_id`. Overrides are matched by name, so a model with a column and a relationship called the same thing (a `notes` text column and a `notes` hasMany) is an error as soon as you override that name. Rename one of them.
 
+Two shortcuts live on the model's columns, where the column is already described. Blueprint ignores both, so they cost nothing in migrations or models, and both work through YAML anchors:
+
+```yaml
+models:
+  ContactType:
+    description: text nullable novaField:markdown     # same as `fields: description: markdown` under nova:
+    legacy_code: string nullable novaField:false      # same as `fields: legacy_code: false`: leave it out
+```
+
+`novaField:<type>` takes any field type a draft's `fields:` takes (case does not matter). What the draft writes under `nova:` for the same column beats the shortcut, and its other options (`label`, `hide`, ...) are kept, so `fields: description: { label: About }` plus the shortcut gives a Markdown field labelled About. An unknown type stops the build and lists the valid ones. The type registry's rules apply to every column; the shortcut is for one.
+
 The default `$search` is the primary key plus the first `search_limit` text columns. Columns matching `search_exclude` in the config (secrets, `color`, `uuid`, `locale`, ...) are skipped. You can steer it from the model itself by marking columns:
 
 ```yaml

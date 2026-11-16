@@ -46,8 +46,11 @@ final class NovaResourceLexer implements Lexer
     /** Planned, not built yet: rejected with a clear message instead of being silently ignored. */
     public const PLANNED = ['metrics', 'filters', 'actions', 'lenses', 'cards', 'dashboards', 'policy'];
 
-    /** Keys of a model that are not columns. */
-    private const MODEL_KEYS = ['relationships', 'indexes', 'meta'];
+    /**
+     * Keys of a model that are not columns. `meta` is not listed: Blueprint's model metadata is a map, which is
+     * skipped anyway because only text definitions are read, while a `meta: json` column is a column.
+     */
+    private const MODEL_KEYS = ['relationships', 'indexes'];
 
     private const FIELD_KEYS = ['as', 'label', 'hide', 'readonly', 'sortable', 'rules', 'map'];
 
@@ -179,7 +182,7 @@ final class NovaResourceLexer implements Lexer
             group: $this->group($name, $definition['group'] ?? null),
             title: $this->column($name, 'title', $definition['title'] ?? null),
             search: $this->search($name, $definition['search'] ?? null),
-            fields: $this->fields($name, $definition['fields'] ?? null),
+            fields: $this->withColumnFields($name, $model, $models, $this->fields($name, $definition['fields'] ?? null)),
             relations: $this->relations($name, $definition['relations'] ?? null),
             settings: ResourceOptions::parse($name, $definition),
             columnSearch: $this->columnSearch($name, $model, $models),
@@ -187,20 +190,21 @@ final class NovaResourceLexer implements Lexer
     }
 
     /**
-     * `searchable`, `searchable:true` and `searchable:false` on a column of the model, read straight from the draft
-     * (Blueprint drops modifiers it does not know, so they are not in its own model tree).
+     * The modifiers written on each column of the model, straight from the draft: Blueprint drops the ones it does
+     * not know (`searchable`, `novaField`), so they are not in its own model tree. Columns only; `relationships`,
+     * `indexes` and the like are skipped.
      *
      * @param  array<string, mixed>  $models
-     * @return array<string, bool>
+     * @return array<string, array<int, array{0: string, 1: ?string}>>  column => [[name (lower case), value], ...]
      */
-    private function columnSearch(string $resource, string $modelName, array $models): array
+    private function columnTokens(string $modelName, array $models): array
     {
         foreach ($models as $key => $columns) {
             if ($this->normalise((string) $key) !== $modelName || ! is_array($columns)) {
                 continue;
             }
 
-            $flags = [];
+            $tokens = [];
 
             foreach ($columns as $column => $definition) {
                 if (! is_string($column) || ! is_string($definition) || in_array($column, self::MODEL_KEYS, true)) {
@@ -211,25 +215,96 @@ final class NovaResourceLexer implements Lexer
                 foreach (preg_split('#("|\').*?\1(*SKIP)(*FAIL)|\s+#', trim($definition)) ?: [] as $token) {
                     [$word, $value] = array_pad(explode(':', $token, 2), 2, null);
 
-                    if (strtolower($word) !== 'searchable') {
-                        continue;
-                    }
-
-                    $flags[$column] = match (strtolower((string) $value)) {
-                        '', 'true' => true,
-                        'false' => false,
-                        default => throw new InvalidArgumentException(
-                            "Nova resource [{$resource}]: column [{$column}] has `searchable:{$value}`. "
-                            . 'Write `searchable`, `searchable:true` or `searchable:false`.',
-                        ),
-                    };
+                    $tokens[$column][] = [strtolower($word), $value];
                 }
             }
 
-            return $flags;
+            return $tokens;
         }
 
         return [];
+    }
+
+    /**
+     * `searchable`, `searchable:true` and `searchable:false` on a column of the model.
+     *
+     * @param  array<string, mixed>  $models
+     * @return array<string, bool>
+     */
+    private function columnSearch(string $resource, string $modelName, array $models): array
+    {
+        $flags = [];
+
+        foreach ($this->columnTokens($modelName, $models) as $column => $tokens) {
+            foreach ($tokens as [$word, $value]) {
+                if ($word !== 'searchable') {
+                    continue;
+                }
+
+                $flags[$column] = match (strtolower((string) $value)) {
+                    '', 'true' => true,
+                    'false' => false,
+                    default => throw new InvalidArgumentException(
+                        "Nova resource [{$resource}]: column [{$column}] has `searchable:{$value}`. "
+                        . 'Write `searchable`, `searchable:true` or `searchable:false`.',
+                    ),
+                };
+            }
+        }
+
+        return $flags;
+    }
+
+    /**
+     * `novaField:markdown` on a column is a shortcut for `fields: column: markdown` under `nova:`;
+     * `novaField:false` for `fields: column: false`. What the draft says under `nova:` wins over it.
+     *
+     * @param  array<string, FieldOptions>  $fields  the overrides written under `nova:`
+     * @param  array<string, mixed>  $models
+     * @return array<string, FieldOptions>
+     */
+    private function withColumnFields(string $resource, string $modelName, array $models, array $fields): array
+    {
+        foreach ($this->columnTokens($modelName, $models) as $column => $tokens) {
+            foreach ($tokens as [$word, $value]) {
+                if ($word !== 'novafield') {
+                    continue;
+                }
+
+                $type = strtolower(trim((string) $value));
+                $existing = $fields[$column] ?? null;
+
+                if ($type === 'false') {
+                    $fields[$column] = $existing ?? new FieldOptions(omit: true);
+
+                    continue;
+                }
+
+                if (! in_array($type, FieldTypes::names(), true)) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Nova resource [%s]: column [%s] has `novaField:%s`, which is not a field type. Valid types: %s, or false to leave the column out.',
+                        $resource,
+                        $column,
+                        (string) $value,
+                        implode(', ', FieldTypes::names()),
+                    ));
+                }
+
+                $fields[$column] = $existing === null
+                    ? new FieldOptions(as: $type)
+                    : ($existing->as !== null || $existing->omit ? $existing : new FieldOptions(
+                        as: $type,
+                        label: $existing->label,
+                        hide: $existing->hide,
+                        readonly: $existing->readonly,
+                        sortable: $existing->sortable,
+                        rules: $existing->rules,
+                        map: $existing->map,
+                    ));
+            }
+        }
+
+        return $fields;
     }
 
     private function group(string $resource, mixed $value): ?string
