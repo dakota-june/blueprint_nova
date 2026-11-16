@@ -20,6 +20,9 @@ final class ColumnInfo
 
     private const DECIMALS = ['decimal', 'unsignedDecimal', 'float', 'double'];
 
+    /** Laravel's decimal() is decimal(8, 2) when the draft gives no precision. */
+    private const EXACT_DECIMALS = ['decimal', 'unsignedDecimal'];
+
     private const STRINGS = ['string', 'char', 'uuid', 'ulid', 'ipAddress', 'macAddress', 'time', 'timeTz', 'set'];
 
     private const TEXTS = ['text', 'mediumText', 'longText'];
@@ -28,7 +31,11 @@ final class ColumnInfo
 
     private const IGNORED = ['rememberToken', 'timestamps', 'timestampsTz', 'nullableTimestamps', 'softDeletes', 'softDeletesTz'];
 
-    /** @param  array<int, string>  $enum */
+    /**
+     * @param  array<int, string>  $enum
+     * @param  ?int  $precision  Total digits of a decimal column (`decimal:8,2` is 8)
+     * @param  ?int  $scale  Digits after the decimal point (`decimal:8,2` is 2)
+     */
     public function __construct(
         public readonly string $name,
         public readonly string $type,
@@ -41,6 +48,7 @@ final class ColumnInfo
         public readonly bool $unsigned = false,
         public readonly bool $primary = false,
         public readonly bool $foreign = false,
+        public readonly ?int $precision = null,
     ) {}
 
     public static function fromBlueprint(Column $column, bool $primary): self
@@ -48,6 +56,7 @@ final class ColumnInfo
         $type = $column->dataType();
         $attributes = array_values($column->attributes());
         $isUuidKey = in_array($type, ['uuid', 'ulid'], true) && str_ends_with($column->name(), '_id');
+        $exact = in_array($type, self::EXACT_DECIMALS, true);
 
         return new self(
             name: $column->name(),
@@ -57,12 +66,15 @@ final class ColumnInfo
             length: in_array($type, ['string', 'char'], true) && isset($attributes[0]) && ctype_digit((string) $attributes[0])
                 ? (int) $attributes[0] : null,
             scale: in_array($type, self::DECIMALS, true) && isset($attributes[1]) && ctype_digit((string) $attributes[1])
-                ? (int) $attributes[1] : null,
+                ? (int) $attributes[1] : ($exact ? 2 : null),
             enum: $type === 'enum' ? array_map('strval', $attributes) : [],
             default: $column->defaultValue(),
             unsigned: $column->isUnsigned() || $type === 'id' || str_starts_with($type, 'unsigned'),
             primary: $primary,
             foreign: ! $primary && ($type === 'id' || $isUuidKey || (bool) $column->isForeignKey()),
+            precision: $exact
+                ? (isset($attributes[0]) && ctype_digit((string) $attributes[0]) ? (int) $attributes[0] : 8)
+                : null,
         );
     }
 

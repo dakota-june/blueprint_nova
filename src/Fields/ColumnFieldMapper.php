@@ -222,10 +222,15 @@ final class ColumnFieldMapper implements FieldMapper
         $isText = in_array($column->type, ['string', 'char'], true);
         $max = 'max:' . ($column->length ?? 255);
 
+        $strict = (bool) config('blueprint_nova_resources.type_rules', true);
+
         switch ($type) {
             case 'text':
                 if ($isText) {
                     $rules[] = $max;
+                }
+                if ($strict) {
+                    array_push($rules, ...$this->formatRules($column));
                 }
                 break;
             case 'email':
@@ -236,14 +241,19 @@ final class ColumnFieldMapper implements FieldMapper
                 }
                 break;
             case 'number':
-                $integer = $column->category() === 'integer';
-                $rules[] = $integer ? 'integer' : 'numeric';
-                if ($integer && $column->unsigned) {
-                    $rules[] = 'min:0';
+            case 'currency':
+                array_push($rules, ...$this->numericRules($column, $strict));
+                break;
+            case 'code':
+                if ($strict && $column->category() === 'json') {
+                    $rules[] = 'json';
                 }
                 break;
-            case 'currency':
-                $rules[] = 'numeric';
+            case 'date':
+            case 'datetime':
+                if ($strict) {
+                    $rules[] = 'date';
+                }
                 break;
             case 'select':
                 if ($column->enum !== []) {
@@ -253,6 +263,100 @@ final class ColumnFieldMapper implements FieldMapper
         }
 
         return array_map(PhpLiteral::string(...), $rules);
+    }
+
+    /**
+     * What the column's data type says about the value, so a value the database would refuse is refused by the
+     * form first: integer ranges, decimal places and size, then the plain `numeric` for anything else.
+     *
+     * @return array<int, string>
+     */
+    private function numericRules(ColumnInfo $column, bool $strict): array
+    {
+        return match ($column->category()) {
+            'integer' => $this->integerRules($column, $strict),
+            'decimal' => $this->decimalRules($column, $strict),
+            default => ['numeric'],
+        };
+    }
+
+    /** Bits of each Blueprint integer type; the increments types are unsigned by nature. */
+    private const INTEGER_BITS = [
+        'tinyInteger' => 8, 'tinyIncrements' => 8,
+        'smallInteger' => 16, 'smallIncrements' => 16,
+        'mediumInteger' => 24, 'mediumIncrements' => 24,
+        'integer' => 32, 'increments' => 32,
+        'bigInteger' => 64, 'bigIncrements' => 64, 'id' => 64,
+    ];
+
+    /** @return array<int, string> */
+    private function integerRules(ColumnInfo $column, bool $strict): array
+    {
+        $base = lcfirst((string) preg_replace('/^unsigned/', '', $column->type));
+        $unsigned = $column->unsigned || str_contains(strtolower($base), 'increments');
+        $bits = self::INTEGER_BITS[$base] ?? null;
+
+        if (! $strict) {
+            return $unsigned ? ['integer', 'min:0'] : ['integer'];
+        }
+
+        if ($base === 'year') {
+            return ['integer', 'between:1901,2155'];
+        }
+
+        if ($bits === null || $bits === 64) {
+            // A 64-bit signed value is any PHP integer; only the sign is worth saying.
+            return $unsigned ? ['integer', 'min:0'] : ['integer'];
+        }
+
+        return ['integer', $unsigned
+            ? 'between:0,' . ((1 << $bits) - 1)
+            : 'between:' . (-(1 << ($bits - 1))) . ',' . ((1 << ($bits - 1)) - 1)];
+    }
+
+    /**
+     * decimal(8,2) takes at most two decimal places and nothing at or above 1,000,000. The largest value is written
+     * as digits, so a wide column does not turn into a float.
+     *
+     * @return array<int, string>
+     */
+    private function decimalRules(ColumnInfo $column, bool $strict): array
+    {
+        if (! $strict) {
+            return ['numeric'];
+        }
+
+        $precision = $column->precision;
+        $scale = $column->scale;
+
+        if ($precision === null || $scale === null || $precision < 1 || $scale > $precision) {
+            return $column->unsigned ? ['numeric', 'min:0'] : ['numeric'];      // float, double
+        }
+
+        $nines = str_repeat('9', $precision);
+        $largest = $scale === 0 ? $nines : (substr($nines, 0, $precision - $scale) ?: '0') . '.' . substr($nines, $precision - $scale);
+
+        return [
+            ...($scale === 0 ? ['integer'] : ['numeric', "decimal:0,{$scale}"]),
+            $column->unsigned ? "between:0,{$largest}" : "between:-{$largest},{$largest}",
+        ];
+    }
+
+    /**
+     * Columns whose type fixes the format of the value.
+     *
+     * @return array<int, string>
+     */
+    private function formatRules(ColumnInfo $column): array
+    {
+        return match ($column->type) {
+            'uuid' => ['uuid'],
+            'ulid' => ['ulid'],
+            'ipAddress' => ['ip'],
+            'macAddress' => ['mac_address'],
+            'time' => ['date_format:H:i:s'],
+            default => [],
+        };
     }
 
     /** @param  array<int, string>  $values */

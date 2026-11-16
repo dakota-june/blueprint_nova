@@ -57,6 +57,14 @@ return [
     ],
 
     /*
+    | Validation rules that follow from a column's data type, on top of required, max, email and url: integers kept
+    | inside what tinyInteger ... integer can hold, decimals inside their places and size (decimal(8,2) takes two
+    | decimal places and nothing at or above 1,000,000), json, date, uuid, ulid, ip and mac addresses. false keeps only
+    | the basics. A draft's own `rules:` on a field replaces all of them either way.
+    */
+    'type_rules' => true,
+
+    /*
     | $group for every resource that does not set `group:`. null leaves Nova's default.
     */
     'default_group' => null,
