@@ -81,7 +81,7 @@ final class RelationshipResolver
         } elseif (in_array($type, self::PLURAL, true)) {
             $method = ($isPivot || $customName)
                 ? Str::plural($isPivot ? $column : $method)
-                : ($related !== null ? $related->pluralName() : Str::plural($method));
+                : ($related !== null && method_exists($related, 'pluralName') ? $related->pluralName() : Str::plural($method));
         }
 
         return new RelationInfo(
