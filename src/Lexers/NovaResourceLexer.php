@@ -214,10 +214,19 @@ final class NovaResourceLexer implements Lexer
             throw new InvalidArgumentException("Nova resource [{$resource}]: `search` must list column names, e.g. `search: [number, reference]`.");
         }
 
-        return array_values(array_map(
-            fn (mixed $column): string => (string) $this->column($resource, 'search', $column ?? null),
-            $columns,
-        ));
+        $names = [];
+
+        foreach ($columns as $column) {
+            $name = is_string($column) ? $this->column($resource, 'search', $column) : null;
+
+            if ($name === null) {
+                throw new InvalidArgumentException("Nova resource [{$resource}]: `search` must list column names, e.g. `search: [number, reference]`.");
+            }
+
+            $names[] = $name;
+        }
+
+        return $names;
     }
 
     /** @return bool|array<int, string> */

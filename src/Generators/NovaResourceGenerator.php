@@ -141,6 +141,19 @@ final class NovaResourceGenerator implements Generator
             $this->notices->add($notice);
         }
 
+        // A resource that already existed keeps its own fields(). If that method never calls blueprintFields(), the
+        // fields generated from the draft are written but never shown, which is easy to miss.
+        if ($existed) {
+            $fieldsMethod = $this->editor->methodSource($result->source, $resource->name(), 'fields');
+
+            if ($fieldsMethod !== null && ! str_contains($fieldsMethod, 'blueprintFields')) {
+                $this->notices->add(
+                    "{$path}: fields() does not call blueprintFields(), so the fields generated from the draft are not shown. "
+                    . 'Add `...$this->blueprintFields($request)` to the array it returns.',
+                );
+            }
+        }
+
         if (! $existed) {
             $this->files->ensureDirectoryExists(dirname($absolute));
         }
@@ -388,10 +401,32 @@ final class NovaResourceGenerator implements Generator
             ...array_map(static fn (RelationInfo $r): string => $r->method, $relations),
         ];
 
+        $relationshipNames = array_map(static fn (RelationInfo $r): string => $r->method, $relations);
+
         foreach (array_keys($resource->fieldOptions()) as $name) {
             if (! in_array($name, $known, true)) {
                 throw new InvalidArgumentException(
                     "Nova resource [{$resource->name()}] configures field [{$name}], which is not a column or relationship of {$model->name()}.",
+                );
+            }
+
+            // Overrides are matched by name, so one key would restyle both. Refuse rather than guess which was meant.
+            if (isset($columns[$name]) && in_array($name, $relationshipNames, true)) {
+                throw new InvalidArgumentException(
+                    "Nova resource [{$resource->name()}] configures field [{$name}], which is both a column and a relationship of "
+                    . "{$model->name()}. Rename one of them; a model cannot reliably have both under the same name.",
+                );
+            }
+        }
+
+        // A relationship's field is always BelongsTo/HasMany/...; `as` and `map` only make sense on a column.
+        foreach ($resource->fieldOptions() as $name => $options) {
+            if (in_array($name, $relationshipNames, true) && ! isset($columns[$name]) && $options->as !== null) {
+                $foreignKey = collect($relations)->first(static fn (RelationInfo $r): bool => $r->method === $name)?->foreignKey;
+                $hint = $foreignKey !== null ? " To show the foreign key as another field type, configure the column [{$foreignKey}] instead." : '';
+
+                throw new InvalidArgumentException(
+                    "Nova resource [{$resource->name()}] field [{$name}] is a relationship, so `as` does not apply to it.{$hint}",
                 );
             }
         }
@@ -468,15 +503,32 @@ final class NovaResourceGenerator implements Generator
             }
 
             $isText = in_array($info->type, ['string', 'char'], true) && ! $info->foreign && ! $info->primary;
-            $secret = (bool) preg_match('/password|secret|token|hash/i', $name);
 
-            if ($isText && ! $secret) {
+            if ($isText && ! $this->excludedFromSearch((string) $name)) {
                 $search[] = $name;
                 $text++;
             }
         }
 
         return $search;
+    }
+
+    /**
+     * Columns that never go into the default $search: secrets, and columns that hold a format or an identifier
+     * (`color`, `locale`, ...) rather than words. fnmatch() patterns from config, compared case-insensitively.
+     * A config published before this option existed falls back to the secrets-only list it always had.
+     */
+    private function excludedFromSearch(string $column): bool
+    {
+        $patterns = (array) config('blueprint_nova_resources.search_exclude', ['*password*', '*secret*', '*token*', '*hash*']);
+
+        foreach ($patterns as $pattern) {
+            if (fnmatch(strtolower((string) $pattern), strtolower($column))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function idField(): FieldDefinition

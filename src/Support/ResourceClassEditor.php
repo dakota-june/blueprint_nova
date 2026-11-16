@@ -16,8 +16,11 @@ use PhpToken;
  * On update():
  *  - tagged member that is still wanted        -> rewritten in place
  *  - tagged member that is no longer wanted    -> deleted (the generator owns it)
- *  - wanted member that is missing             -> inserted (properties first, methods after the generated ones)
- *  - untagged member with a wanted name        -> the developer's; left alone and reported as a notice
+ *  - wanted member that is missing             -> inserted (properties after the last generated property, else
+ *                                                 after the last property of the class, else first in the class;
+ *                                                 methods after the generated ones)
+ *  - untagged member with a wanted name        -> the developer's; left alone, and reported as a notice unless it
+ *                                                 is already exactly what would have been generated
  *  - imports are only ever added; developer members, comments, traits and constants are untouched
  *
  * Remove the tag from a member and it becomes the developer's.
@@ -129,8 +132,14 @@ final class ResourceClassEditor
 
             if ($text !== null) {
                 $handled[$key] = true;
-                $label = $member['kind'] === 'property' ? "{$class}::\${$member['name']}" : "{$class}::{$member['name']}()";
-                $notices[] = "{$label} already exists without the " . self::MARKER . ' tag, so it belongs to you and was left untouched.';
+
+                // The developer already wrote exactly what we would have: nothing to say about it.
+                $same = $this->signature(substr($source, $member['start'], $member['end'] - $member['start'])) === $this->signature($text);
+
+                if (! $same) {
+                    $label = $member['kind'] === 'property' ? "{$class}::\${$member['name']}" : "{$class}::{$member['name']}()";
+                    $notices[] = "{$label} already exists without the " . self::MARKER . ' tag, so it belongs to you and was left untouched.';
+                }
             }
 
             $remaining[] = $member;
@@ -243,13 +252,21 @@ final class ResourceClassEditor
     /** Whitespace-insensitive hash of one method, or null when it does not exist. Used to spot an untouched seed. */
     public function methodHash(string $source, string $class, string $method): ?string
     {
+        $text = $this->methodSource($source, $class, $method);
+
+        return $text === null ? null : $this->hash($text);
+    }
+
+    /** The full text of one method (docblock included), or null when the class has no such method. */
+    public function methodSource(string $source, string $class, string $method): ?string
+    {
         $tokens = PhpToken::tokenize($source);
         $classIdx = $this->findClass($tokens, $class);
         $scan = $classIdx === null ? null : $this->scan($tokens, $source, $classIdx);
 
         foreach ($scan['members'] ?? [] as $member) {
             if ($member['kind'] === 'method' && strtolower($member['name']) === strtolower($method)) {
-                return $this->hash(substr($source, $member['start'], $member['end'] - $member['start']));
+                return substr($source, $member['start'], $member['end'] - $member['start']);
             }
         }
 
@@ -388,9 +405,9 @@ final class ResourceClassEditor
     private function isPropertyPrefix(PhpToken $token): bool
     {
         return $token->is([
-            T_PUBLIC, T_PROTECTED, T_PRIVATE, T_STATIC, T_READONLY, T_VAR,
-            T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_ARRAY,
-        ]) || in_array($token->text, ['?', '|', '&'], true);
+                T_PUBLIC, T_PROTECTED, T_PRIVATE, T_STATIC, T_READONLY, T_VAR,
+                T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_ARRAY,
+            ]) || in_array($token->text, ['?', '|', '&'], true);
     }
 
     /**
@@ -522,8 +539,12 @@ final class ResourceClassEditor
         $inserts = [];
 
         if ($properties !== []) {
-            if ($lastGeneratedProperty !== null) {
-                $inserts[$lastGeneratedProperty['end']] = ($inserts[$lastGeneratedProperty['end']] ?? '') . "\n\n" . implode("\n\n", $properties);
+            // Next to the properties the class already has, so a `use SomeTrait;` or a constant at the top of the
+            // class is not pushed down; only a class with no properties at all gets them right after the brace.
+            $propertyAnchor = $lastGeneratedProperty ?? $this->lastOfKind($remaining, 'property');
+
+            if ($propertyAnchor !== null) {
+                $inserts[$propertyAnchor['end']] = ($inserts[$propertyAnchor['end']] ?? '') . "\n\n" . implode("\n\n", $properties);
             } else {
                 $inserts[$open + 1] = ($inserts[$open + 1] ?? '') . "\n" . implode("\n\n", $properties) . "\n";
             }
@@ -616,5 +637,23 @@ final class ResourceClassEditor
     private function hash(string $memberSource): string
     {
         return sha1((string) preg_replace('/\s+/', ' ', trim($memberSource)));
+    }
+
+    /**
+     * A member's code with comments, docblocks, whitespace and trailing commas removed, so two spellings of the
+     * same declaration compare equal. Used to tell "the developer wrote something different" from "the developer
+     * already wrote exactly what we would have".
+     */
+    private function signature(string $memberSource): string
+    {
+        $parts = [];
+
+        foreach (PhpToken::tokenize('<?php ' . $memberSource) as $token) {
+            if (! $token->isIgnorable()) {
+                $parts[] = $token->text;
+            }
+        }
+
+        return (string) preg_replace('/,\s*([\]\)])/', '$1', implode(' ', $parts));
     }
 }

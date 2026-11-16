@@ -41,6 +41,15 @@ return [
     'search_limit' => 5,
 
     /*
+    | Text columns that are never put into the default $search: secrets, and columns that hold a format or an
+    | identifier rather than words. fnmatch() patterns, case-insensitive. A draft's own `search:` ignores this list.
+    */
+    'search_exclude' => [
+        '*password*', '*secret*', '*token*', '*hash*',
+        '*color', '*colour', 'uuid', 'ulid', 'ip_address', 'mac_address', 'locale', 'timezone', 'currency',
+    ],
+
+    /*
     | $group for every resource that does not set `group:`. null leaves Nova's default.
     */
     'default_group' => null,

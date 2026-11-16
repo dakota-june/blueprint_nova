@@ -22,6 +22,8 @@ nova:
             amount: { label: Paid, hide: [index] }
 ```
 
+Requires Laravel 13 and PHP 8.3+.
+
 `php artisan blueprint:build` writes `app/Nova/Invoice.php` and `app/Nova/Payment.php`.
 
 ## How ownership works
@@ -35,13 +37,20 @@ Generated members carry an `@generated blueprint_nova_resources` docblock tag.
 
 New files get a `fields()` that spreads `...$this->blueprintFields($request)`, so you add your own fields beside the generated ones. To take over a generated member, delete its `@generated` tag. If the generator wants a name you already have untagged, it leaves yours alone and prints a notice.
 
-When a resource file already exists (you wrote it, or an earlier build created it), the generator adds any missing tagged members to it: `$model`, `$title`, `$search`, `blueprintFields()` and the options you set. It never edits or removes anything untagged.
+When a resource file already exists (you wrote it, or an earlier build created it), the generator adds any missing tagged members to it: `$model`, `$title`, `$search`, `blueprintFields()` and the options you set. It never edits or removes anything untagged. New properties go after the properties the class already has, so a `use SomeTrait;` or constant at the top stays where it is.
+
+Two things the build tells you about an existing file:
+
+- An untagged member the generator wanted to write is reported, unless it is already exactly what would have been generated (same code, ignoring comments, spacing and trailing commas), in which case there is nothing to say.
+- If its `fields()` never calls `blueprintFields()`, the fields generated from the draft are written but never shown. The build says so; add `...$this->blueprintFields($request)` to the array `fields()` returns.
 
 ## `nova:` options
 
 `model`, `group`, `title`, `search`, `fields`, `relations`, plus the [resource options](#resource-options) below. `nova: ~` with `auto_resources` enabled generates a resource for every non-pivot model; `Name: false` opts one out.
 
-Field overrides (`fields: column: …`): a type string (`text textarea markdown trix code number currency boolean date datetime select badge email url password color country timezone hidden`) or a map with `omit as label hide readonly sortable rules map`. Both the column (`invoice_id`) and the relationship (`invoice`) name work for belongsTo; `as` is read from the column name only.
+Field overrides (`fields: column: …`): a type string (`text textarea markdown trix code number currency boolean date datetime select badge email url password color country timezone hidden`) or a map with `omit as label hide readonly sortable rules map`. Both the column (`invoice_id`) and the relationship (`invoice`) name work for belongsTo, but `as` is only accepted on the column: a relationship's field type is fixed, so `invoice: { as: text }` is an error that points you at `invoice_id`. Overrides are matched by name, so a model with a column and a relationship called the same thing (a `notes` text column and a `notes` hasMany) is an error as soon as you override that name. Rename one of them.
+
+The default `$search` is the primary key plus the first `search_limit` text columns. Columns matching `search_exclude` in the config (secrets, `color`, `uuid`, `locale`, ...) are skipped; a draft's own `search:` ignores that list and must name real columns (an empty entry such as `search: [~]` is an error).
 
 Column defaults: Nova's create form does not read database defaults, so `is_modifiable: boolean default:true` would save as false. A literal Blueprint `default:` is emitted as `->default(...)` on boolean, number, currency, text, textarea, email, url, color and select (enum values only) fields. Expressions such as `CURRENT_TIMESTAMP`, `null`, dates and numbers with leading zeros or exponents are skipped. The default applies to create forms only.
 
