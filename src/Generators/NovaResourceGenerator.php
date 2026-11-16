@@ -493,18 +493,33 @@ final class NovaResourceGenerator implements Generator
             return $resource->search();
         }
 
-        $search = $model->usesPrimaryKey() ? [$model->primaryKey()] : [];
+        // `searchable` / `searchable:false` on a column adjusts the default: true always searches it (whatever its
+        // type, the exclusion list or the limit), false never does. A draft's own `search:` skips all of this.
+        $flags = $resource->columnSearch();
+        $primary = $model->usesPrimaryKey() ? $model->primaryKey() : null;
+        $search = $primary !== null && ($flags[$primary] ?? null) !== false ? [$primary] : [];
         $limit = max(0, (int) config('blueprint_nova_resources.search_limit', 5));
         $text = 0;
 
         foreach ($columns as $name => $info) {
-            if ($text >= $limit) {
-                break;
+            $name = (string) $name;
+            $flag = $flags[$name] ?? null;
+
+            if ($flag === true) {
+                if (! in_array($name, $search, true)) {
+                    $search[] = $name;
+                }
+
+                continue;
+            }
+
+            if ($flag === false || $text >= $limit) {
+                continue;
             }
 
             $isText = in_array($info->type, ['string', 'char'], true) && ! $info->foreign && ! $info->primary;
 
-            if ($isText && ! $this->excludedFromSearch((string) $name)) {
+            if ($isText && ! $this->excludedFromSearch($name)) {
                 $search[] = $name;
                 $text++;
             }

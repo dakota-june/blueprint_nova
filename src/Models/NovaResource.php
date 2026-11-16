@@ -19,6 +19,7 @@ final class NovaResource implements BlueprintModel
      * @param  array<string, FieldOptions>  $fields  Per-field overrides, keyed by column (or relationship) name
      * @param  bool|array<int, string>  $relations  true = all, false = none, list = only those relationship methods
      * @param  array<string, mixed>  $settings  Resource-level options (see ResourceOptions), dotted path => normalised value
+     * @param  array<string, bool>  $columnSearch  `searchable` / `searchable:false` written on the model's columns, by column
      */
     public function __construct(
         private readonly string $name,
@@ -30,6 +31,7 @@ final class NovaResource implements BlueprintModel
         private readonly array $fields,
         private readonly bool|array $relations,
         private readonly array $settings = [],
+        private readonly array $columnSearch = [],
     ) {}
 
     public function name(): string
@@ -94,5 +96,11 @@ final class NovaResource implements BlueprintModel
     public function settings(): array
     {
         return $this->settings;
+    }
+
+    /** @return array<string, bool> column => true (always search it) or false (never, in the default $search) */
+    public function columnSearch(): array
+    {
+        return $this->columnSearch;
     }
 }

@@ -46,6 +46,9 @@ final class NovaResourceLexer implements Lexer
     /** Planned, not built yet: rejected with a clear message instead of being silently ignored. */
     public const PLANNED = ['metrics', 'filters', 'actions', 'lenses', 'cards', 'dashboards', 'policy'];
 
+    /** Keys of a model that are not columns. */
+    private const MODEL_KEYS = ['relationships', 'indexes', 'meta'];
+
     private const FIELD_KEYS = ['as', 'label', 'hide', 'readonly', 'sortable', 'rules', 'map'];
 
     /** Names Nova's own `nova:resource` command refuses (as far as the Nova API reference lists them). */
@@ -67,7 +70,7 @@ final class NovaResourceLexer implements Lexer
                 continue;                               // `Invoice: false` opts a model out, e.g. under auto_resources
             }
 
-            $resource = $this->resource((string) $key, $definition);
+            $resource = $this->resource((string) $key, $definition, (array) ($tokens['models'] ?? []));
             $fqcn = $resource->fullyQualifiedClassName();
 
             if (isset($resources[$fqcn])) {
@@ -132,7 +135,8 @@ final class NovaResourceLexer implements Lexer
         return $entries;
     }
 
-    private function resource(string $key, mixed $definition): NovaResource
+    /** @param  array<string, mixed>  $models  the draft's `models:` section, as written */
+    private function resource(string $key, mixed $definition, array $models = []): NovaResource
     {
         [$sub, $name] = $this->nameParts($key);
 
@@ -178,7 +182,54 @@ final class NovaResourceLexer implements Lexer
             fields: $this->fields($name, $definition['fields'] ?? null),
             relations: $this->relations($name, $definition['relations'] ?? null),
             settings: ResourceOptions::parse($name, $definition),
+            columnSearch: $this->columnSearch($name, $model, $models),
         );
+    }
+
+    /**
+     * `searchable`, `searchable:true` and `searchable:false` on a column of the model, read straight from the draft
+     * (Blueprint drops modifiers it does not know, so they are not in its own model tree).
+     *
+     * @param  array<string, mixed>  $models
+     * @return array<string, bool>
+     */
+    private function columnSearch(string $resource, string $modelName, array $models): array
+    {
+        foreach ($models as $key => $columns) {
+            if ($this->normalise((string) $key) !== $modelName || ! is_array($columns)) {
+                continue;
+            }
+
+            $flags = [];
+
+            foreach ($columns as $column => $definition) {
+                if (! is_string($column) || ! is_string($definition) || in_array($column, self::MODEL_KEYS, true)) {
+                    continue;
+                }
+
+                // The same split Blueprint uses, so a quoted `default:"a b"` stays one token.
+                foreach (preg_split('#("|\').*?\1(*SKIP)(*FAIL)|\s+#', trim($definition)) ?: [] as $token) {
+                    [$word, $value] = array_pad(explode(':', $token, 2), 2, null);
+
+                    if (strtolower($word) !== 'searchable') {
+                        continue;
+                    }
+
+                    $flags[$column] = match (strtolower((string) $value)) {
+                        '', 'true' => true,
+                        'false' => false,
+                        default => throw new InvalidArgumentException(
+                            "Nova resource [{$resource}]: column [{$column}] has `searchable:{$value}`. "
+                            . 'Write `searchable`, `searchable:true` or `searchable:false`.',
+                        ),
+                    };
+                }
+            }
+
+            return $flags;
+        }
+
+        return [];
     }
 
     private function group(string $resource, mixed $value): ?string
