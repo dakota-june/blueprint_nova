@@ -7,6 +7,9 @@ namespace Dakotajune\BlueprintNovaResources\Fields;
 /**
  * The ordered list of field mappers. Higher priority runs first; the built-in ColumnFieldMapper is the
  * fallback at the lowest priority. Nothing is discovered: a mapper exists only if something registered it.
+ *
+ * The fallback asks the FieldTypeRegistry which Nova field a column becomes, so a rule registered there
+ * (or in config) reaches every build without anyone writing a mapper.
  */
 final class FieldMapperRegistry
 {
@@ -15,9 +18,9 @@ final class FieldMapperRegistry
 
     private int $sequence = 0;
 
-    public function __construct(?FieldMapper $fallback = null)
+    public function __construct(?FieldMapper $fallback = null, ?FieldTypeRegistry $types = null)
     {
-        $this->register($fallback ?? new ColumnFieldMapper(), PHP_INT_MIN);
+        $this->register($fallback ?? new ColumnFieldMapper($types), PHP_INT_MIN);
     }
 
     public function register(FieldMapper $mapper, int $priority = 0): void

@@ -113,11 +113,17 @@ final class NovaResourceLexer implements Lexer
 
         if ((bool) config('blueprint_nova_resources.auto_resources', false)) {
             $declared = array_map(fn (string $k): string => $this->normalise($k), array_keys($entries));
+            // Models that never get a resource unless the draft lists them under `nova:` itself.
+            $except = array_map(
+                fn (mixed $k): string => $this->normalise((string) $k),
+                (array) config('blueprint_nova_resources.auto_resources_except', []),
+            );
 
             foreach ($tokens['models'] ?? [] as $model => $definition) {
                 $isPivot = is_array($definition) && ! empty($definition['meta']['pivot']);
+                $name = $this->normalise((string) $model);
 
-                if (! $isPivot && ! in_array($this->normalise((string) $model), $declared, true)) {
+                if (! $isPivot && ! in_array($name, $declared, true) && ! in_array($name, $except, true)) {
                     $entries[(string) $model] = null;
                 }
             }

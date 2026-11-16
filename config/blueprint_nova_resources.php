@@ -9,10 +9,17 @@ return [
     'namespace' => 'Nova',
 
     /*
-    | Generate a resource for every model in the draft that is not listed under `nova:`.
-    | Opt a model out with `Name: false`. Pivot models are skipped.
+    | Generate a resource for every model in the draft, without listing them under `nova:` (leave the section out
+    | altogether). Models you do list still take their own options; opt one out with `Name: false`, or for good with
+    | `auto_resources_except`. Pivot models are skipped.
     */
     'auto_resources' => false,
+
+    /*
+    | Models that `auto_resources` never scaffolds, e.g. ['PasswordReset', 'Admin\\AuditLog']. Listing one under
+    | `nova:` in a draft still generates it.
+    */
+    'auto_resources_except' => [],
 
     /*
     | Class the generated resources extend. null = App\Nova\Resource when that file exists
@@ -60,7 +67,23 @@ return [
     'password_rules' => ['string', 'min:8'],
 
     /*
-    | Text columns whose name matches get a more specific field. fnmatch() patterns.
+    | Which Nova field a column becomes. A column is looked up by name (`name_hints`), then by its Blueprint type or
+    | category (`field_types`), then the built-in defaults: integer/decimal => number, string => text,
+    | text => textarea, json => code, boolean => boolean, date => date, datetime => datetime, enum => select.
+    | A draft's own `fields:` always wins. Values: text textarea markdown trix code number currency boolean date
+    | datetime select badge email url password color country timezone hidden.
+    |
+    | Keys of field_types are a Blueprint type ('longText', 'char', 'uuid', ...) or one of the categories
+    | string, text, integer, decimal, json, boolean, date, datetime, enum; the type wins over its category.
+    |
+    |     'field_types' => ['text' => 'markdown', 'uuid' => 'text'],
+    |
+    | Code can add rules too: app(FieldTypeRegistry::class)->type('text', 'markdown')->name('*_url', 'url').
+    */
+    'field_types' => [],
+
+    /*
+    | Text and string columns whose name matches get a more specific field. Field type => fnmatch() patterns.
     */
     'name_hints' => [
         'email' => ['email', '*_email'],

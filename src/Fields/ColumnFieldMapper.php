@@ -9,15 +9,17 @@ use InvalidArgumentException;
 
 /**
  * The built-in mapper: column definition (type, nullability, length, enum values, uniqueness, name) to Nova field.
- * Draft overrides (`fields:`) always win over what is derived here.
+ * Which Nova field type a column gets is the FieldTypeRegistry's call; draft overrides (`fields:`) always win
+ * over what is derived here.
  */
 final class ColumnFieldMapper implements FieldMapper
 {
-    private const DEFAULT_HINTS = [
-        'email' => ['email', '*_email'],
-        'password' => ['password'],
-        'url' => ['url', '*_url', 'website'],
-    ];
+    private readonly FieldTypeRegistry $types;
+
+    public function __construct(?FieldTypeRegistry $types = null)
+    {
+        $this->types = $types ?? new FieldTypeRegistry();
+    }
 
     public function map(FieldContext $context): ?array
     {
@@ -39,32 +41,8 @@ final class ColumnFieldMapper implements FieldMapper
         return match ($column->category()) {
             'primary' => 'id',
             'ignored' => 'ignored',
-            'integer', 'decimal' => 'number',
-            'string' => $this->hint($column->name) ?? 'text',
-            'text' => 'textarea',
-            'json' => 'code',
-            'boolean' => 'boolean',
-            'date' => 'date',
-            'datetime' => 'datetime',
-            'enum' => 'select',
-            default => null,
+            default => $this->types->resolve($column),
         };
-    }
-
-    /** Column names that deserve a more specific field than plain text (`email`, `password`, `*_url`, ...). */
-    private function hint(string $name): ?string
-    {
-        $hints = (array) config('blueprint_nova_resources.name_hints', self::DEFAULT_HINTS);
-
-        foreach ($hints as $type => $patterns) {
-            foreach ((array) $patterns as $pattern) {
-                if (fnmatch((string) $pattern, $name)) {
-                    return (string) $type;
-                }
-            }
-        }
-
-        return null;
     }
 
     private function id(FieldContext $context): FieldDefinition

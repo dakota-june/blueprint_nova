@@ -6,6 +6,7 @@ namespace Dakotajune\BlueprintNovaResources;
 
 use Blueprint\Blueprint;
 use Dakotajune\BlueprintNovaResources\Fields\FieldMapperRegistry;
+use Dakotajune\BlueprintNovaResources\Fields\FieldTypeRegistry;
 use Dakotajune\BlueprintNovaResources\Generators\NovaResourceGenerator;
 use Dakotajune\BlueprintNovaResources\Lexers\NovaResourceLexer;
 use Dakotajune\BlueprintNovaResources\Listeners\CleanUpOnErase;
@@ -19,8 +20,14 @@ use Illuminate\Support\ServiceProvider;
  * deferred providers cannot both own one service. We also need boot() to run so the erase listener is
  * registered before `blueprint:erase` starts.
  *
- * Other packages add field mappers from their own provider:
+ * Other packages (or your own AppServiceProvider) customise the build from their provider:
  *
+ *     // which Nova field a column becomes
+ *     $this->app->make(\Dakotajune\BlueprintNovaResources\Fields\FieldTypeRegistry::class)
+ *         ->type('text', 'markdown')
+ *         ->name('*_url', 'url');
+ *
+ *     // or take over mapping entirely
  *     $this->app->make(\Dakotajune\BlueprintNovaResources\Fields\FieldMapperRegistry::class)->register(new MyMapper(), priority: 10);
  */
 final class BlueprintNovaResourcesServiceProvider extends ServiceProvider
@@ -29,6 +36,7 @@ final class BlueprintNovaResourcesServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/blueprint_nova_resources.php', 'blueprint_nova_resources');
 
+        $this->app->singleton(FieldTypeRegistry::class);
         $this->app->singleton(FieldMapperRegistry::class);
         $this->app->singleton(NoticeBag::class);
 
