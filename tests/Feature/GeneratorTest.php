@@ -140,3 +140,25 @@ it('only asks for registration when the provider does not already register app/N
     'overrides resources() and lists only User' => ["<?php\n\nnamespace App\\Providers;\n\nuse Laravel\\Nova\\Nova;\nuse Laravel\\Nova\\NovaApplicationServiceProvider;\n\nclass NovaServiceProvider extends NovaApplicationServiceProvider\n{\n    protected function resources(): void\n    {\n        Nova::resources([\\App\\Nova\\User::class]);\n    }\n}\n", 2],
     'not a Nova provider' => ["<?php\n\nnamespace App\\Providers;\n\nuse Illuminate\\Support\\ServiceProvider;\n\nclass NovaServiceProvider extends ServiceProvider\n{\n}\n", 3],
 ]);
+
+it('starts create forms from the column default', function () {
+    $draft = $this->draft();
+    $draft['models']['Payment']['is_open'] = 'boolean default:true';
+    $draft['models']['Payment']['is_hidden'] = 'boolean default:false';
+    $draft['models']['Payment']['kind'] = 'string:20 default:"card"';
+    $draft['models']['Payment']['retries'] = 'integer default:3';
+    $draft['models']['Payment']['code'] = 'string:8 default:007';
+    $draft['models']['Payment']['sent_at'] = 'timestamp default:CURRENT_TIMESTAMP';
+    $this->build($draft);
+
+    $payment = file_get_contents($this->novaPath('Payment'));
+
+    expect($payment)
+        ->toContain("Boolean::make('Is Open', 'is_open')->sortable()->default(true)")
+        ->toContain("Boolean::make('Is Hidden', 'is_hidden')->sortable()->default(false)")
+        ->toContain("->default('card')")
+        ->toContain("->default(3)")
+        ->toContain("->default('007')")
+        ->not->toContain("Boolean::make('Settled', 'paid')->sortable()->default")
+        ->not->toContain('CURRENT_TIMESTAMP');
+});

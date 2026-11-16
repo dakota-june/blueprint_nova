@@ -41,6 +41,8 @@ New files get a `fields()` that spreads `...$this->blueprintFields($request)`, s
 
 Field overrides (`fields: column: …`): a type string (`text textarea markdown trix code number currency boolean date datetime select badge email url password color country timezone hidden`) or a map with `omit as label hide readonly sortable rules map`. Both the column (`invoice_id`) and the relationship (`invoice`) name work for belongsTo.
 
+Column defaults: Nova's create form does not read database defaults, so `is_modifiable: boolean default:true` would save as false. A literal Blueprint `default:` is emitted as `->default(...)` on boolean, number, currency, text, textarea, email, url, color and select (enum values only) fields. Expressions such as `CURRENT_TIMESTAMP`, `null`, dates and numbers with leading zeros or exponents are skipped. The default applies to create forms only.
+
 Supported relationships: `belongsTo`, `hasOne`, `hasMany`, `belongsToMany`. Others produce a notice. Metrics, filters, actions, lenses, cards, dashboards and policies are planned and are rejected with a clear error rather than ignored.
 
 When a related model has no Nova resource, a belongsTo falls back to a plain field and collection relations are skipped; both print a notice.

@@ -105,6 +105,11 @@ final class ColumnFieldMapper implements FieldMapper
             $field = $field->with('nullable');
         }
 
+        $default = $this->defaultSource($type, $column);
+        if ($default !== null) {
+            $field = $field->with('default', $default);
+        }
+
         $rules = $options->rules !== null
             ? array_map(PhpLiteral::string(...), $options->rules)
             : $this->rules($type, $column);
@@ -177,6 +182,54 @@ final class ColumnFieldMapper implements FieldMapper
             ?? ((bool) config('blueprint_nova_resources.sortable', true) && in_array($type, [...FieldTypes::SORTABLE, 'id'], true));
 
         return $sortable ? $field->with('sortable') : $field;
+    }
+
+    /**
+     * Blueprint's `default:` as the value a Nova create form starts with, as PHP source. Nova does not read
+     * database defaults, so without this a Boolean saves as false and a text field starts empty.
+     * Null when there is no default or it is not a plain literal (expressions, dates, `null`).
+     */
+    private function defaultSource(string $type, ColumnInfo $column): ?string
+    {
+        $raw = $column->default;
+
+        if ($raw === null || is_array($raw) || ! in_array($type, ['boolean', 'number', 'currency', 'text', 'textarea', 'email', 'url', 'select', 'color'], true)) {
+            return null;
+        }
+
+        if (is_string($raw)) {
+            $raw = trim($raw);
+            if (strlen($raw) >= 2 && $raw[0] === $raw[-1] && ($raw[0] === '"' || $raw[0] === "'")) {
+                $raw = substr($raw, 1, -1);
+            } elseif (strtolower($raw) === 'null') {
+                return null;
+            }
+        }
+
+        if ($type === 'boolean') {
+            return match (true) {
+                $raw === true, $raw === 1, in_array(is_string($raw) ? strtolower($raw) : $raw, ['true', '1'], true) => 'true',
+                $raw === false, $raw === 0, in_array(is_string($raw) ? strtolower($raw) : $raw, ['false', '0'], true) => 'false',
+                default => null,
+            };
+        }
+
+        if (is_bool($raw)) {
+            return null;
+        }
+
+        if ($type === 'number' || $type === 'currency') {
+            // Plain decimal literals only: "007" would be octal and "1e3" a float once written as PHP source.
+            return preg_match('~^-?(?:0|[1-9]\d*)(?:\.\d+)?$~', (string) $raw) === 1 ? (string) $raw : null;
+        }
+
+        $raw = (string) $raw;
+
+        if ($type === 'select' && ! in_array($raw, $column->enum, true)) {
+            return null;
+        }
+
+        return PhpLiteral::string($raw);
     }
 
     /** @return array<int, string>  Validation rules as PHP source */
