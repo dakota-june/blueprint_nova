@@ -80,7 +80,9 @@ trait ReadsTokens
     }
 
     /**
-     * Top-level `use Foo\Bar [as Baz];` statements before the class.
+     * Top-level `use Foo\Bar [as Baz];` statements before the class, including comma lists
+     * (`use A, B;`) and group imports (`use Foo\{Bar, Baz as Qux, Sub\Thing};`). Function and const imports
+     * are not classes and are not tracked.
      *
      * @param  array<int, PhpToken>  $tokens
      * @return array<string, string>  alias => fqcn
@@ -96,8 +98,29 @@ trait ReadsTokens
             }
             $text = trim($text);
 
-            if (preg_match('/^(function|const)\s/i', $text) || str_contains($text, '{')) {
-                continue; // function/const/group imports are not tracked
+            if (preg_match('/^(function|const)\s/i', $text)) {
+                continue;
+            }
+
+            // Group import. Without this a class imported as `use Laravel\Nova\Fields\{Text, Number};` looks
+            // unimported, and the editor would add a second `use ...\Text;`: a fatal "name already in use".
+            if (preg_match('/^\\\\?([\w\\\\]+)\s*\{(.*)\}$/s', $text, $group)) {
+                $prefix = rtrim($group[1], '\\');
+
+                foreach (explode(',', $group[2]) as $part) {
+                    $part = trim($part);
+
+                    if ($part === '' || preg_match('/^(function|const)\s/i', $part)) {
+                        continue;
+                    }
+
+                    if (preg_match('/^([\w\\\\]+)(?:\s+as\s+(\w+))?$/i', $part, $m)) {
+                        $fqcn = $prefix . '\\' . $m[1];
+                        $map[$m[2] ?? $this->shortName($fqcn)] = $fqcn;
+                    }
+                }
+
+                continue;
             }
 
             foreach (explode(',', $text) as $part) {

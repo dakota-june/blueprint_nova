@@ -24,6 +24,7 @@ use Dakotajune\BlueprintNovaResources\Support\ManifestStore;
 use Dakotajune\BlueprintNovaResources\Support\NoticeBag;
 use Dakotajune\BlueprintNovaResources\Support\ResourceClassEditor;
 use Dakotajune\BlueprintNovaResources\Support\ResourceMemberBuilder;
+use Dakotajune\BlueprintNovaResources\Support\ResourceOptions;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -71,6 +72,11 @@ final class NovaResourceGenerator implements Generator
         $resources = $tree->toArray()['nova'] ?? [];
 
         if ($resources === []) {
+            // Like `.blueprint`, the manifest describes the latest build only. A build with no resources (the
+            // `nova:` section removed, or `nova: false`) must not leave the last build's record behind, or a later
+            // `blueprint:erase` would strip generated members from files this build never meant to touch.
+            $this->manifests->save(new Manifest());
+
             return $output;
         }
 
@@ -217,6 +223,30 @@ final class NovaResourceGenerator implements Generator
                 $fields,
             )),
         ];
+
+        // Resource-level options (navigation, labels, search, paging, ...): only values that differ from Nova's own
+        // default are written. An option that left the draft is simply not wanted any more, so the editor deletes
+        // the member it generated earlier.
+        foreach (ResourceOptions::differing($resource->settings()) as $path => $value) {
+            $option = ResourceOptions::definition($path);
+            $literal = ResourceOptions::literal($path, $value);
+
+            if ($option['kind'] === 'property') {
+                $properties[$option['member']] = ResourceMemberBuilder::property(
+                    $option['member'],
+                    $option['doc'],
+                    $literal,
+                    ResourceOptions::varType($path),
+                );
+            } else {
+                $methods[$option['member']] = ResourceMemberBuilder::staticMethod(
+                    $option['member'],
+                    $option['doc'],
+                    'string',
+                    $literal,
+                );
+            }
+        }
 
         return [$properties, $methods];
     }

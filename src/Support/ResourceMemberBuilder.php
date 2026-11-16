@@ -22,6 +22,28 @@ final class ResourceMemberBuilder
     }
 
     /**
+     * A static method whose whole body is `return <literal>;`, e.g. label() and singularLabel().
+     *
+     * @param  string  $value  The returned value, as PHP source
+     */
+    public static function staticMethod(string $name, string $description, string $returnType, string $value): string
+    {
+        return implode("\n", [
+            '    /**',
+            "     * {$description}",
+            '     *',
+            '     * ' . ResourceClassEditor::MARKER . ' Rewritten on every build. Remove this tag to take ownership of the method.',
+            '     *',
+            "     * @return {$returnType}",
+            '     */',
+            "    public static function {$name}(): {$returnType}",
+            '    {',
+            "        return {$value};",
+            '    }',
+        ]);
+    }
+
+    /**
      * @param  array<int, string>  $fields  Rendered fields (FieldDefinition::render()), without trailing commas
      */
     public static function fields(array $fields): string

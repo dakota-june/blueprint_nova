@@ -8,6 +8,7 @@ use Blueprint\Contracts\Lexer;
 use Dakotajune\BlueprintNovaResources\Fields\FieldOptions;
 use Dakotajune\BlueprintNovaResources\Fields\FieldTypes;
 use Dakotajune\BlueprintNovaResources\Models\NovaResource;
+use Dakotajune\BlueprintNovaResources\Support\ResourceOptions;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -23,6 +24,10 @@ use InvalidArgumentException;
  *       title: number               # column shown as the resource's title
  *       search: [number, reference]
  *       relations: [invoice]        # true (default) | false | only these relationship methods
+ *       navigation: false           # resource-level options: see ResourceOptions
+ *       label: Bills
+ *       singular: Bill
+ *       globalSearch: { results: 10 }
  *       fields:
  *         status: badge             # change a column's field type
  *         notes:                    # or the long form
@@ -36,7 +41,7 @@ use InvalidArgumentException;
  */
 final class NovaResourceLexer implements Lexer
 {
-    public const OPTIONS = ['model', 'group', 'title', 'search', 'fields', 'relations'];
+    public const OPTIONS = ['model', 'group', 'title', 'search', 'fields', 'relations', ...ResourceOptions::KEYS];
 
     /** Planned, not built yet: rejected with a clear message instead of being silently ignored. */
     public const PLANNED = ['metrics', 'filters', 'actions', 'lenses', 'cards', 'dashboards', 'policy'];
@@ -166,6 +171,7 @@ final class NovaResourceLexer implements Lexer
             search: $this->search($name, $definition['search'] ?? null),
             fields: $this->fields($name, $definition['fields'] ?? null),
             relations: $this->relations($name, $definition['relations'] ?? null),
+            settings: ResourceOptions::parse($name, $definition),
         );
     }
 

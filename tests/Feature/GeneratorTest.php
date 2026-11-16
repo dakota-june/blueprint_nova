@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Filesystem\Filesystem;
+
 function lints(string $source): bool
 {
     try {
@@ -67,7 +69,7 @@ it('is idempotent and keeps developer code across rebuilds', function () {
 });
 
 it('never reports a pre-existing developer file as created', function () {
-    mkdir(base_path('app/Nova'), 0777, true);
+    (new Filesystem())->ensureDirectoryExists(base_path('app/Nova'));
     file_put_contents($this->novaPath('User'), "<?php\n\nnamespace App\\Nova;\n\nuse Laravel\\Nova\\Resource;\n\nclass User extends Resource\n{\n    public static \$model = \\App\\Models\\User::class;\n\n    public function fields(\\Laravel\\Nova\\Http\\Requests\\NovaRequest \$request)\n    {\n        return [];\n    }\n}\n");
 
     $out = $this->build($this->draft());
@@ -127,7 +129,8 @@ it('reports files as [label, path] pairs, the way Blueprint prints and records t
 });
 
 it('only asks for registration when the provider does not already register app/Nova', function (string $provider, int $expected) {
-    mkdir(base_path('app/Providers'), 0777, true);
+    // The Testbench skeleton may already have app/Providers, and earlier datasets leave it behind.
+    (new Filesystem())->ensureDirectoryExists(base_path('app/Providers'));
     file_put_contents(base_path('app/Providers/NovaServiceProvider.php'), $provider);
 
     $this->build($this->draft());

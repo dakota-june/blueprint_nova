@@ -36,6 +36,12 @@ abstract class TestCase extends Orchestra
         @unlink(base_path('.blueprint_nova_resources'));
         @unlink(base_path('.blueprint'));
         @unlink(base_path('app/Providers/NovaServiceProvider.php'));
+
+        // The Testbench skeleton outlives a run, so backups written by the erase test must not pile up between runs.
+        foreach (glob(base_path('.blueprint.bak-*')) ?: [] as $backup) {
+            @unlink($backup);
+        }
+
         $this->app->make(\Dakotajune\BlueprintNovaResources\Support\NoticeBag::class)->pull();
     }
 
