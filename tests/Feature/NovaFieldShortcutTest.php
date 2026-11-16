@@ -89,3 +89,66 @@ it('only reads the shortcut of the model a resource belongs to', function () {
 
     expect(novaSource('Payment'))->not->toContain('Markdown');
 });
+
+// -- novaLabel and novaHelp --------------------------------------------------------------------------------------
+
+it('takes a label and help text from novaLabel and novaHelp', function () {
+    $draft = $this->draft();
+    $draft['models']['Invoice']['notes'] = 'text nullable normalize:trim novaField:Markdown novaLabel:"Just another field" novaHelp:"Here is some nova help"';
+
+    $this->build($draft);
+
+    expect(novaSource('Invoice'))
+        ->toContain("Markdown::make('Just another field', 'notes')")
+        ->toContain("->help('Here is some nova help')");
+});
+
+it('escapes quotes in help text', function () {
+    $draft = $this->draft();
+    $draft['models']['Invoice']['notes'] = 'text nullable novaHelp:"Don\'t paste HTML"';
+
+    $this->build($draft);
+
+    expect(novaSource('Invoice'))->toContain("->help('Don\\'t paste HTML')");
+});
+
+it('lets the nova section beat novaLabel and novaHelp one by one', function () {
+    $draft = $this->draft();
+    $draft['models']['Invoice']['notes'] = 'text nullable novaLabel:"From the column" novaHelp:"Column help"';
+    $draft['nova']['Invoice'] = ['fields' => ['notes' => ['label' => 'From nova']]];
+
+    $this->build($draft);
+
+    expect(novaSource('Invoice'))
+        ->toContain("Textarea::make('From nova', 'notes')")
+        ->toContain("->help('Column help')")
+        ->not->toContain('From the column');
+});
+
+it('accepts help under a field in the nova section', function () {
+    $draft = $this->draft();
+    $draft['nova']['Invoice'] = ['fields' => ['notes' => ['help' => 'Written under nova']]];
+
+    $this->build($draft);
+
+    expect(novaSource('Invoice'))->toContain("->help('Written under nova')");
+});
+
+it('labels and explains a BelongsTo through its foreign key column', function () {
+    $draft = $this->draft();
+    $draft['models']['Payment']['invoice_id'] = 'id foreign novaLabel:"Parent invoice" novaHelp:"Pick one"';
+
+    $this->build($draft);
+
+    expect(novaSource('Payment'))
+        ->toContain("BelongsTo::make('Parent invoice', 'invoice', Invoice::class)")
+        ->toContain("->help('Pick one')");
+});
+
+it('refuses a novaLabel or novaHelp with no text', function (string $modifier) {
+    $draft = $this->draft();
+    $draft['models']['Invoice']['notes'] = "text nullable {$modifier}";
+
+    expect(fn () => $this->build($draft))
+        ->toThrow(InvalidArgumentException::class, 'with no text');
+})->with(['novaLabel:""', 'novaHelp', 'novaLabel:']);

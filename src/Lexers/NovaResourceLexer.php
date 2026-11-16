@@ -52,7 +52,7 @@ final class NovaResourceLexer implements Lexer
      */
     private const MODEL_KEYS = ['relationships', 'indexes'];
 
-    private const FIELD_KEYS = ['as', 'label', 'hide', 'readonly', 'sortable', 'rules', 'map'];
+    private const FIELD_KEYS = ['as', 'label', 'help', 'hide', 'readonly', 'sortable', 'rules', 'map'];
 
     /** Names Nova's own `nova:resource` command refuses (as far as the Nova API reference lists them). */
     private const RESERVED = ['card', 'cards', 'dashboard', 'dashboards', 'metric', 'metrics', 'script', 'scripts'];
@@ -256,8 +256,13 @@ final class NovaResourceLexer implements Lexer
     }
 
     /**
-     * `novaField:markdown` on a column is a shortcut for `fields: column: markdown` under `nova:`;
-     * `novaField:false` for `fields: column: false`. What the draft says under `nova:` wins over it.
+     * Shortcuts on a column for what `fields:` says under `nova:`:
+     *
+     *   novaField:markdown       fields: column: markdown      (novaField:false leaves the column out)
+     *   novaLabel:"Notes"        fields: column: { label: Notes }
+     *   novaHelp:"Shown below"   fields: column: { help: Shown below }
+     *
+     * What the draft writes under `nova:` for the same column wins over a shortcut, property by property.
      *
      * @param  array<string, FieldOptions>  $fields  the overrides written under `nova:`
      * @param  array<string, mixed>  $models
@@ -266,45 +271,60 @@ final class NovaResourceLexer implements Lexer
     private function withColumnFields(string $resource, string $modelName, array $models, array $fields): array
     {
         foreach ($this->columnTokens($modelName, $models) as $column => $tokens) {
+            $as = $label = $help = null;
+            $omit = false;
+
             foreach ($tokens as [$word, $value]) {
-                if ($word !== 'novafield') {
-                    continue;
+                switch ($word) {
+                    case 'novafield':
+                        $type = strtolower(trim((string) $value));
+
+                        if ($type === 'false') {
+                            $omit = true;
+                        } elseif (in_array($type, FieldTypes::names(), true)) {
+                            $as = $type;
+                        } else {
+                            throw new InvalidArgumentException(sprintf(
+                                'Nova resource [%s]: column [%s] has `novaField:%s`, which is not a field type. Valid types: %s, or false to leave the column out.',
+                                $resource,
+                                $column,
+                                (string) $value,
+                                implode(', ', FieldTypes::names()),
+                            ));
+                        }
+                        break;
+                    case 'novalabel':
+                        $label = $this->quotedText($resource, $column, 'novaLabel', $value);
+                        break;
+                    case 'novahelp':
+                        $help = $this->quotedText($resource, $column, 'novaHelp', $value);
+                        break;
                 }
-
-                $type = strtolower(trim((string) $value));
-                $existing = $fields[$column] ?? null;
-
-                if ($type === 'false') {
-                    $fields[$column] = $existing ?? new FieldOptions(omit: true);
-
-                    continue;
-                }
-
-                if (! in_array($type, FieldTypes::names(), true)) {
-                    throw new InvalidArgumentException(sprintf(
-                        'Nova resource [%s]: column [%s] has `novaField:%s`, which is not a field type. Valid types: %s, or false to leave the column out.',
-                        $resource,
-                        $column,
-                        (string) $value,
-                        implode(', ', FieldTypes::names()),
-                    ));
-                }
-
-                $fields[$column] = $existing === null
-                    ? new FieldOptions(as: $type)
-                    : ($existing->as !== null || $existing->omit ? $existing : new FieldOptions(
-                        as: $type,
-                        label: $existing->label,
-                        hide: $existing->hide,
-                        readonly: $existing->readonly,
-                        sortable: $existing->sortable,
-                        rules: $existing->rules,
-                        map: $existing->map,
-                    ));
             }
+
+            if ($as === null && $label === null && $help === null && ! $omit) {
+                continue;
+            }
+
+            $shortcut = new FieldOptions(omit: $omit, as: $as, label: $label, help: $help);
+            $fields[$column] = isset($fields[$column]) ? $fields[$column]->orElse($shortcut) : $shortcut;
         }
 
         return $fields;
+    }
+
+    /** The text of `novaLabel:"Some words"`, without its quotes. Several words need the quotes to stay one token. */
+    private function quotedText(string $resource, string $column, string $option, ?string $value): string
+    {
+        $text = (string) preg_replace('~^([\'"])(.*)\1$~s', '$2', trim((string) $value));
+
+        if (trim($text) === '') {
+            throw new InvalidArgumentException(
+                "Nova resource [{$resource}]: column [{$column}] has `{$option}` with no text. Write `{$option}:\"Some words\"`.",
+            );
+        }
+
+        return $text;
     }
 
     private function group(string $resource, mixed $value): ?string
@@ -441,6 +461,7 @@ final class NovaResourceLexer implements Lexer
         return new FieldOptions(
             as: $as,
             label: isset($spec['label']) ? (string) $spec['label'] : null,
+            help: isset($spec['help']) ? (string) $spec['help'] : null,
             hide: $this->hide($resource, $column, $spec['hide'] ?? null),
             readonly: $this->flag($resource, $column, 'readonly', $spec['readonly'] ?? null),
             sortable: $this->flag($resource, $column, 'sortable', $spec['sortable'] ?? null),
