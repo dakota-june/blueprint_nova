@@ -61,7 +61,15 @@ models:
     legacy_code: string nullable novaField:false      # same as `fields: legacy_code: false`: leave it out
 ```
 
-`novaField:<type>` takes any field type a draft's `fields:` takes (case does not matter). What the draft writes under `nova:` for the same column beats the shortcut, and its other options (`label`, `hide`, ...) are kept, so `fields: description: { label: About }` plus the shortcut gives a Markdown field labelled About. An unknown type stops the build and lists the valid ones. The type registry's rules apply to every column; the shortcut is for one.
+Two more shortcuts set what the field says to the user:
+
+```yaml
+    description: text nullable novaField:markdown novaLabel:"About this type" novaHelp:"Shown under the field"
+```
+
+`novaLabel` is the label (`fields: description: { label: ... }`) and `novaHelp` is Nova's `->help()` text (`{ help: ... }`, which `fields:` accepts too). Put several words in quotes so they stay one value; plain YAML also needs the whole column definition in quotes if the text contains `: `. For a belongsTo, write them on the foreign key column (`invoice_id: id foreign novaLabel:"Parent invoice"`). Quotes in the text are escaped for you. A value with no text is an error.
+
+`novaField:<type>` takes any field type a draft's `fields:` takes (case does not matter). What the draft writes under `nova:` for the same column beats the shortcuts one property at a time, so `fields: description: { label: About }` plus `novaField:markdown` gives a Markdown field labelled About, and its `novaHelp` is kept. An unknown type stops the build and lists the valid ones. The type registry's rules apply to every column; the shortcut is for one.
 
 The default `$search` is the primary key plus the first `search_limit` text columns. Columns matching `search_exclude` in the config (secrets, `color`, `uuid`, `locale`, ...) are skipped. You can steer it from the model itself by marking columns:
 
