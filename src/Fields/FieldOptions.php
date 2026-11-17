@@ -20,6 +20,7 @@ final class FieldOptions
      * @param  array<int, string>|null  $rules  Replaces the rules derived from the column
      * @param  array<string, string>|null  $map  value => badge type, for `as: badge`
      * @param  ?string  $help  Help text shown with the field (Nova's `->help()`)
+     * @param  ?bool  $create  BelongsTo only: show Nova's "create a new related resource" button (`->showCreateRelationButton()`)
      */
     public function __construct(
         public readonly bool $omit = false,
@@ -31,6 +32,7 @@ final class FieldOptions
         public readonly ?array $rules = null,
         public readonly ?array $map = null,
         public readonly ?string $help = null,
+        public readonly ?bool $create = null,
     ) {}
 
     public static function none(): self
@@ -57,6 +59,7 @@ final class FieldOptions
             rules: $this->rules ?? $fallback->rules,
             map: $this->map ?? $fallback->map,
             help: $this->help ?? $fallback->help,
+            create: $this->create ?? $fallback->create,
         );
     }
 

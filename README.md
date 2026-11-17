@@ -69,6 +69,15 @@ Two more shortcuts set what the field says to the user:
 
 `novaLabel` is the label (`fields: description: { label: ... }`) and `novaHelp` is Nova's `->help()` text (`{ help: ... }`, which `fields:` accepts too). Put several words in quotes so they stay one value; plain YAML also needs the whole column definition in quotes if the text contains `: `. For a belongsTo, write them on the foreign key column (`invoice_id: id foreign novaLabel:"Parent invoice"`). Quotes in the text are escaped for you. A value with no text is an error.
 
+`novaCreate` puts Nova's "create a new related record" button on a belongsTo field (`->showCreateRelationButton()`). It goes on the foreign key column, like `novaLabel`:
+
+```yaml
+  Contact:
+    contact_type_id: id foreign novaCreate          # same as novaCreate:true
+```
+
+The same thing under `nova:`, by relationship name or by column: `fields: contactType: { create: true }`. To put the button on every BelongsTo, set `'create_relation_button' => true` in the config; a column then opts out with `novaCreate:false`. Nova shows no button unless asked, so nothing is written for false. Only belongsTo fields have this button: `create` on any other column, or on a hasMany or belongsToMany, stops the build with an error. When a column shortcut and a relationship-name override both exist, they are combined and the relationship's own values win.
+
 `novaField:<type>` takes any field type a draft's `fields:` takes (case does not matter). What the draft writes under `nova:` for the same column beats the shortcuts one property at a time, so `fields: description: { label: About }` plus `novaField:markdown` gives a Markdown field labelled About, and its `novaHelp` is kept. An unknown type stops the build and lists the valid ones. The type registry's rules apply to every column; the shortcut is for one.
 
 The default `$search` is the primary key plus the first `search_limit` text columns. Columns matching `search_exclude` in the config (secrets, `color`, `uuid`, `locale`, ...) are skipped. You can steer it from the model itself by marking columns:

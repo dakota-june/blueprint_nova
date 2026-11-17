@@ -42,6 +42,12 @@ final class RelationFieldFactory
             $field = $field->with('rules', PhpLiteral::string('required'));
         }
 
+        // Nova shows no create button unless asked, so only a wish for one is written: `novaCreate` on the column,
+        // `create: true` in the draft, or `create_relation_button` in the config as the default for every BelongsTo.
+        if ($options->create ?? (bool) config('blueprint_nova_resources.create_relation_button', false)) {
+            $field = $field->with('showCreateRelationButton');
+        }
+
         return $options->applyVisibility($field);
     }
 

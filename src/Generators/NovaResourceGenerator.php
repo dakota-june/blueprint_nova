@@ -315,7 +315,9 @@ final class NovaResourceGenerator implements Generator
             if ($options->as === null && isset($belongsTo[$name])) {
                 $relation = $belongsTo[$name];
                 // `fields: invoice: ...` (the relationship) and `fields: invoice_id: ...` (the column) both work.
-                $effective = $overrides[$relation->method] ?? $options;
+                // A shortcut on the column (`novaLabel`, `novaCreate`) and an override by relationship name both apply;
+                // where they disagree the relationship's own wins.
+                $effective = isset($overrides[$relation->method]) ? $overrides[$relation->method]->orElse($options) : $options;
 
                 if ($effective->omit) {
                     continue;
@@ -427,6 +429,27 @@ final class NovaResourceGenerator implements Generator
 
                 throw new InvalidArgumentException(
                     "Nova resource [{$resource->name()}] field [{$name}] is a relationship, so `as` does not apply to it.{$hint}",
+                );
+            }
+        }
+
+        // The create button belongs to a BelongsTo field; nothing else has one.
+        $belongsTo = [];
+        foreach ($relations as $relation) {
+            if ($relation->type === 'belongsTo') {
+                $belongsTo[] = $relation->method;
+
+                if ($relation->foreignKey !== null) {
+                    $belongsTo[] = $relation->foreignKey;
+                }
+            }
+        }
+
+        foreach ($resource->fieldOptions() as $name => $options) {
+            if ($options->create !== null && ! in_array($name, $belongsTo, true)) {
+                throw new InvalidArgumentException(
+                    "Nova resource [{$resource->name()}] field [{$name}]: `create` only applies to a belongsTo relationship, "
+                    . 'written on its foreign key column or by the relationship name.',
                 );
             }
         }

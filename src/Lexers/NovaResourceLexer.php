@@ -52,7 +52,7 @@ final class NovaResourceLexer implements Lexer
      */
     private const MODEL_KEYS = ['relationships', 'indexes'];
 
-    private const FIELD_KEYS = ['as', 'label', 'help', 'hide', 'readonly', 'sortable', 'rules', 'map'];
+    private const FIELD_KEYS = ['as', 'label', 'help', 'create', 'hide', 'readonly', 'sortable', 'rules', 'map'];
 
     /** Names Nova's own `nova:resource` command refuses (as far as the Nova API reference lists them). */
     private const RESERVED = ['card', 'cards', 'dashboard', 'dashboards', 'metric', 'metrics', 'script', 'scripts'];
@@ -261,6 +261,7 @@ final class NovaResourceLexer implements Lexer
      *   novaField:markdown       fields: column: markdown      (novaField:false leaves the column out)
      *   novaLabel:"Notes"        fields: column: { label: Notes }
      *   novaHelp:"Shown below"   fields: column: { help: Shown below }
+     *   novaCreate               fields: column: { create: true }   (a belongsTo's foreign key; novaCreate:false too)
      *
      * What the draft writes under `nova:` for the same column wins over a shortcut, property by property.
      *
@@ -271,7 +272,7 @@ final class NovaResourceLexer implements Lexer
     private function withColumnFields(string $resource, string $modelName, array $models, array $fields): array
     {
         foreach ($this->columnTokens($modelName, $models) as $column => $tokens) {
-            $as = $label = $help = null;
+            $as = $label = $help = $create = null;
             $omit = false;
 
             foreach ($tokens as [$word, $value]) {
@@ -299,14 +300,24 @@ final class NovaResourceLexer implements Lexer
                     case 'novahelp':
                         $help = $this->quotedText($resource, $column, 'novaHelp', $value);
                         break;
+                    case 'novacreate':
+                        $create = match (strtolower((string) $value)) {
+                            '', 'true' => true,
+                            'false' => false,
+                            default => throw new InvalidArgumentException(
+                                "Nova resource [{$resource}]: column [{$column}] has `novaCreate:{$value}`. "
+                                . 'Write `novaCreate`, `novaCreate:true` or `novaCreate:false`.',
+                            ),
+                        };
+                        break;
                 }
             }
 
-            if ($as === null && $label === null && $help === null && ! $omit) {
+            if ($as === null && $label === null && $help === null && $create === null && ! $omit) {
                 continue;
             }
 
-            $shortcut = new FieldOptions(omit: $omit, as: $as, label: $label, help: $help);
+            $shortcut = new FieldOptions(omit: $omit, as: $as, label: $label, help: $help, create: $create);
             $fields[$column] = isset($fields[$column]) ? $fields[$column]->orElse($shortcut) : $shortcut;
         }
 
@@ -462,6 +473,7 @@ final class NovaResourceLexer implements Lexer
             as: $as,
             label: isset($spec['label']) ? (string) $spec['label'] : null,
             help: isset($spec['help']) ? (string) $spec['help'] : null,
+            create: $this->flag($resource, $column, 'create', $spec['create'] ?? null),
             hide: $this->hide($resource, $column, $spec['hide'] ?? null),
             readonly: $this->flag($resource, $column, 'readonly', $spec['readonly'] ?? null),
             sortable: $this->flag($resource, $column, 'sortable', $spec['sortable'] ?? null),

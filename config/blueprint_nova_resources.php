@@ -65,6 +65,13 @@ return [
     'type_rules' => true,
 
     /*
+    | Put Nova's "create a new related record" button (->showCreateRelationButton()) on every BelongsTo field.
+    | Nova's own default is off. A column opts in or out with `novaCreate` / `novaCreate:false`, a draft with
+    | `fields: contactType: { create: true }`. Only BelongsTo fields have this button.
+    */
+    'create_relation_button' => false,
+
+    /*
     | $group for every resource that does not set `group:`. null leaves Nova's default.
     */
     'default_group' => null,
